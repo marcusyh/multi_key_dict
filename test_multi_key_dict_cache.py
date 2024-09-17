@@ -122,7 +122,9 @@ class TestMultiKeyDictCache(unittest.TestCase):
         self.cache.upsert(item)
         
         self.assertTrue(self.cache.is_exists('id', '8'))
+        self.assertTrue(self.cache.is_exists('8'))
         self.assertFalse(self.cache.is_exists('id', '999'))
+        self.assertFalse(self.cache.is_exists('999'))
 
 if __name__ == '__main__':
     unittest.main()

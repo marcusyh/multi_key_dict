@@ -327,7 +327,7 @@ class MultiKeyDictCache():
         return None, None
 
 
-    def is_exists(self, type_name, key):
+    def is_exists(self, type_name, key=None):
         """
         Checks if the given key exists in the cache.
         
@@ -337,4 +337,6 @@ class MultiKeyDictCache():
         Returns:
             bool: True if the key exists in the cache, False otherwise.
         """
+        if key is None:
+            return type_name in self._mkd_cache
         return (type_name, key) in self._mkd_cache

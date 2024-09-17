@@ -111,7 +111,7 @@ class TestMultiKeyDictCache(unittest.TestCase):
         query_result = self.cache.query({'name': 'Query Item 1'})
         self.assertEqual(query_result[0]['id'], '6')
 
-    def test_is_exists(self):
+    def test_is_exists_by_key(self):
         item = {
             'id': '8',
             'name': 'Exists Test',
@@ -121,12 +121,33 @@ class TestMultiKeyDictCache(unittest.TestCase):
         }
         self.cache.upsert(item)
         
-        self.assertTrue(self.cache.is_exists('8', 'id'))
-        self.assertTrue(self.cache.is_exists('8'))
-        self.assertTrue(self.cache.is_exists('Exists Test', 'name'))
-        self.assertFalse(self.cache.is_exists('Exists Test'))
-        self.assertFalse(self.cache.is_exists('999', 'id'))
-        self.assertFalse(self.cache.is_exists('999'))
+        self.assertTrue(self.cache.is_exists_by_key('8', 'id'))
+        self.assertTrue(self.cache.is_exists_by_key('8'))
+        self.assertTrue(self.cache.is_exists_by_key('Exists Test', 'name'))
+        self.assertFalse(self.cache.is_exists_by_key('Exists Test'))
+        self.assertFalse(self.cache.is_exists_by_key('999', 'id'))
+        self.assertFalse(self.cache.is_exists_by_key('999'))
+
+    def test_is_exists(self):
+        item = {
+            'id': '8',
+            'name': 'Exists Test',
+            'category': 'Test',
+            'subcategory': 'Exists',
+            'email': 'exists@example.com',
+            'extra': 'Extra data'
+        }
+        self.cache.upsert(item)
+        
+        self.assertTrue(self.cache.is_exists({'category': 'Test', 'subcategory': 'Exists', 'id': '8', 'name': 'Exists Test'}))
+        self.assertTrue(self.cache.is_exists({'category': 'Test', 'subcategory': 'Exists', 'name': 'Exists Test'}))
+        self.assertTrue(self.cache.is_exists({'category': 'Test', 'subcategory': 'Exists'}))
+        self.assertTrue(self.cache.is_exists({'name': 'Exists Test'}))
+        self.assertTrue(self.cache.is_exists({'name': 'Exists Test', 'subtitle': 'Subtitle'}))
+        self.assertFalse(self.cache.is_exists({'Extra': 'Extra data'}))
+        self.assertFalse(self.cache.is_exists({}))
+        self.assertFalse(self.cache.is_exists({'Extra': 'Extra data', 'subtitle': 'Subtitle'}))
+
 
 if __name__ == '__main__':
     unittest.main()

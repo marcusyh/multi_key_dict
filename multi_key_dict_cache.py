@@ -327,7 +327,7 @@ class MultiKeyDictCache():
         return None, None
 
 
-    def is_exists(self, key, type_name=None):
+    def is_exists_by_key(self, key, type_name=None):
         """
         Checks if the given key exists in the cache.
         
@@ -340,3 +340,22 @@ class MultiKeyDictCache():
         if type_name is None:
             return key in self._mkd_cache
         return (type_name, key) in self._mkd_cache
+
+
+    def is_exists(self, sub_dict):
+        """
+        Checks if the given sub_dict exists in the cache.
+        
+        Args:
+            sub_dict (dict): The sub_dict to check for existence.
+        
+        Returns:
+            bool: True if the sub_dict exists in the cache, False otherwise.
+        """
+        query_keys = self._generate_query_keys(sub_dict)
+        for _type, query_key in zip(self.types_list, query_keys):
+            if not query_key:
+                continue
+            if self.is_exists_by_key(query_key, _type):
+                return True
+        return False

@@ -318,6 +318,26 @@ class MultiKeyDict:
         Note:
             Handles the complexities of setting items in a multi-key dictionary.
             Checks for conflicts, updates existing entries if necessary, and maintains the internal indices.
+
+        Example:
+            >>> mkd[(1, 'AAPL', None)] = {'price': 150.0, 'volume': 1000000}
+            This will set the value for 'table_id' and 'stock_code', but not for 'stock_name'. 
+            It looks like the table_id sub-dictionary and the stock_code sub-dictionary have the 
+            stock information value, but the stock_name sub-dictionary doesn't have the value.
+
+            A simplified version of mkd_keys is also supported:
+            >>> mkd[1] = {'price': 150.0, 'volume': 1000000}
+            This method will set the value for 'table_id' (the default key type), the value can be
+            retrieved by the 'table_id' key type, but cannot be retrieved by the 'stock_code' or 'stock_name' key type.
+
+        Note:
+            In the simplified way, the default key type is used to define which type is used, and the
+            key is always added to the default key type. For example:
+            >>> mkd['AAPL'] = {'price': 150.0, 'volume': 1000000} # will also add the key to the 'table_id' key type.
+            To add the key to the 'stock_code' key type, you should use the full key tuple, the first way, or you 
+            need to change the default type by the set_default method.
+            >>> mkd.set_default('stock_code') # or mkd.set_default(1)
+            >>> mkd['AAPL'] = {'price': 150.0, 'volume': 1000000}
         """
         data_key = self._normalize_keys(mkd_keys)
         
@@ -344,7 +364,7 @@ class MultiKeyDict:
         Get an item from the dictionary.
 
         Args:
-            mkd_key: The mkd_key to look up.
+            type_key: The key to look up. Can be a tuple of (mkd_type, mkd_key) or just mkd_key if using the default type.
 
         Returns:
             The mkd_value associated with the key.
@@ -354,6 +374,16 @@ class MultiKeyDict:
 
         Note:
             Uses the internal indices for efficient lookup across different key types.
+
+        Example:
+            >>> mkd[['table_id', 1]]
+            {'price': 150.0, 'volume': 1000000}
+            >>> mkd[('table_id', 1)]
+            {'price': 150.0, 'volume': 1000000}
+            >>> mkd[1]
+            {'price': 150.0, 'volume': 1000000}
+            All the above will return the value for the 'table_id' key type, they are the same.
+            The third way parameter, we also call it mkd_key.
         """
         mkd_type, mkd_key = self._parse_key(type_key)
         data_key = self._indices[mkd_type][mkd_key]
@@ -419,7 +449,7 @@ class MultiKeyDict:
         Delete an item from the dictionary.
 
         Args:
-            type_key: The key to delete.
+            type_key: The key to delete. Can be a tuple of (mkd_type, mkd_key) or just mkd_key if using the default type.
             deep (bool): If True, remove all references to the key. If False, only remove the specific key type.
 
         Note:
@@ -587,11 +617,11 @@ class MultiKeyDict:
         This method works with all mkd_types.
 
         Args:
-            other: Another dictionary or an iterable of key/value pairs.
+            mkd_dict: Another dictionary or an iterable of key/value pairs.
             force (bool): If True, ignore conflicting keys and update other items. If False, raise an exception on conflicts.
 
         Raises:
-            TypeError: If 'other' is not a dictionary or iterable of key/value pairs.
+            TypeError: If 'mkd_dict' is not a dictionary or iterable of key/value pairs.
             ValueError: If conflicting keys are found and force is False.
         """
         if isinstance(mkd_dict, dict):
@@ -676,6 +706,5 @@ class MultiKeyDict:
                     continue
                 self._indices[mkd_type][mkd_key] = data_key
             self._data[data_key] = mkd_value            
-
 
 

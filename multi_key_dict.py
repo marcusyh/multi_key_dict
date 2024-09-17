@@ -115,11 +115,12 @@ class MultiKeyDict:
             default_type_index (int or str): The default key type to use when a single key is provided.
                 Can be either an index of mkd_types or a string matching one of the mkd_types.
         """
-        self._data = {}  # Main storage for data_key -> mkd_value pairs
-        self._indices = {mkd_type: {} for mkd_type in mkd_types}  # Indices for quick lookup
-        self._mkd_types = mkd_types  # List of supported mkd_types
+        self._mkd_types = [tuple(mkd_type) if isinstance(mkd_type, list) else mkd_type for mkd_type in mkd_types]
         self._default_type_index = None
         self.set_default(default_type_index)  # Set the default mkd_type
+
+        self._indices = {mkd_type: {} for mkd_type in self._mkd_types}  # Indices for quick lookup
+        self._data = {}  # Main storage for data_key -> mkd_value pairs
        
     def _normalize_keys(self, mkd_keys):
         """
@@ -295,6 +296,8 @@ class MultiKeyDict:
         if isinstance(mkd_type_index, int) and 0 <= mkd_type_index < len(self._mkd_types):
             self._default_type_index = mkd_type_index
             return
+        if isinstance(mkd_type_index, list):
+            mkd_type_index = tuple(mkd_type_index)
         if mkd_type_index in self._mkd_types:
             self._default_type_index = self._mkd_types.index(mkd_type_index)
             return
@@ -317,10 +320,8 @@ class MultiKeyDict:
             Checks for conflicts, updates existing entries if necessary, and maintains the internal indices.
         """
         data_key = self._normalize_keys(mkd_keys)
-        print(data_key)
         
         conflicting_keys, updating_keys = self._check_conflicating_keys(data_key)
-        print(conflicting_keys, updating_keys)
         if conflicting_keys:
             raise ValueError(f"Conflicting key found for {data_key}: {conflicting_keys}")
 
@@ -356,9 +357,63 @@ class MultiKeyDict:
         """
         mkd_type, mkd_key = self._parse_key(type_key)
         data_key = self._indices[mkd_type][mkd_key]
-        return self._data[data_key]
+        return self._data[data_key], data_key
+    
 
+    def exists(self, type_key):
+        """
+        Check if a key exists in the dictionary.
 
+        Args:
+            type_key: The key to check. Can be a tuple of (mkd_type, mkd_key) or just mkd_key if using the default type.
+
+        Returns:
+            bool: True if the key exists, False otherwise.
+
+        Example:
+        >>> mkd = MultiKeyDict(['id', 'name'], default_type_index=0)
+        >>> mkd[(1, 'Alice')] = {'age': 30}
+        >>> mkd.exists(('id', 1))
+        True
+        >>> mkd.exists(('name', 'Alice'))
+        True
+        >>> mkd.exists(1)  # Using default type 'id'
+        True
+        >>> mkd.exists(('id', 2))
+        False
+        """
+        try:
+            mkd_type, mkd_key = self._parse_key(type_key)
+            return mkd_key in self._indices[mkd_type]
+        except KeyError:
+            return False
+
+    def __contains__(self, type_key):
+        """
+        Implement the 'in' operator for the MultiKeyDict.
+
+        This allows using the 'in' operator directly with the dictionary.
+
+        Args:
+            type_key: The key to check. Can be a tuple of (mkd_type, mkd_key) or just mkd_key if using the default type.
+
+        Returns:
+            bool: True if the key exists, False otherwise.
+
+        Example:
+        >>> mkd = MultiKeyDict(['id', 'name'], default_type_index=0)
+        >>> mkd[(1, 'Alice')] = {'age': 30}
+        >>> ('id', 1) in mkd
+        True
+        >>> ('name', 'Alice') in mkd
+        True
+        >>> 1 in mkd  # Using default type 'id'
+        True
+        >>> ('id', 2) in mkd
+        False
+        """
+        return self.exists(type_key)
+            
     def __delitem__(self, type_key, deep=False):
         """
         Delete an item from the dictionary.
@@ -391,20 +446,15 @@ class MultiKeyDict:
             Handles the complexities of removing items from a multi-key dictionary.
             Updates internal indices and handles partial key deletions when 'deep' is False.
         """
-        print(mkd_keys, 1)
         data_key = self._normalize_keys(mkd_keys)
         
-        print(data_key, 2)
         conflicting_keys, updating_keys = self._check_conflicating_keys(data_key)
-        print(conflicting_keys, updating_keys, 3)
-        print(self._data, 4)
         if conflicting_keys:
             raise ValueError(f"Conflicting key found for {data_key}: {conflicting_keys}")
         
         if updating_keys:
             for exists_data_key in updating_keys:
                 exists_data_key = tuple(exists_data_key)
-                print(exists_data_key)
                 mkd_value = self._data[exists_data_key]
                 del self._data[exists_data_key]
             full_data_key = self._get_new_data_key(data_key, updating_keys)
@@ -413,15 +463,11 @@ class MultiKeyDict:
                 raise KeyError(f"Key not found: {data_key}")
             del self._data[data_key]
             full_data_key = data_key
-        print(self._data, 5)
-        print(full_data_key, 6)
         
-        print(self._indices, 7)
         if deep:
             for mkd_type, mkd_key in zip(self._mkd_types, full_data_key):
                 if mkd_key is not None and mkd_key in self._indices[mkd_type]:
                     del self._indices[mkd_type][mkd_key]
-            print(self._indices, 8)
             return
 
         if updating_keys:
@@ -430,19 +476,14 @@ class MultiKeyDict:
             new_data_key = [None]*len(data_key)
             
         # Update all indices
-        print(data_key, new_data_key, 9.1)
         for mkd_type, mkd_key, new_mkd_key in zip(self._mkd_types, data_key, new_data_key):
             if new_mkd_key is not None:
                 self._indices[mkd_type][new_mkd_key] = new_data_key
                 self._data[tuple(new_data_key)] = mkd_value
-                print(new_data_key, 9.2)
                 continue
             if mkd_key in self._indices[mkd_type]:
-                print(mkd_key, 9.3)
                 del self._indices[mkd_type][mkd_key]
         
-        print(self._indices, 9.4)
-        print(self._data, 9.5)
                 
 
     def __iter__(self):
@@ -581,7 +622,6 @@ class MultiKeyDict:
             
             update_normally[normalized_keys] = mkd_value
 
-        print(conflicts, update_indices, update_normally)
         if conflicts:
             print(f"Warning: Conflicting key found between new elements and exists elements: ")
             for conflict in conflicts:
@@ -593,7 +633,6 @@ class MultiKeyDict:
         conflicts = []
         duplicates = []
         checking_list = list(update_indices.keys())+list(update_normally.keys())
-        print(conflicts, duplicates, checking_list)
         skip_list = [False]*len(checking_list)
         for i, keys1 in enumerate(checking_list):
             for keys2 in list(checking_list)[i+1:]:
@@ -624,7 +663,6 @@ class MultiKeyDict:
                 raise ValueError(f"Conflicting or duplicate key found")
 
 
-        print(update_indices, update_normally)
         # Perform the update
         for data_key, tmp in update_indices.items():
             exists_data_key, mkd_value = tmp
@@ -632,15 +670,12 @@ class MultiKeyDict:
             del self._data[exists_data_key]
             update_normally[data_key] = mkd_value
             
-        print(update_normally)
         for data_key, mkd_value in update_normally.items():
             for mkd_type, mkd_key in zip(self._mkd_types, data_key):
                 if mkd_key is None:
                     continue
                 self._indices[mkd_type][mkd_key] = data_key
-            self._data[data_key] = mkd_value
-            
-        print(self._data)
-        print(self._indices)
+            self._data[data_key] = mkd_value            
+
 
 

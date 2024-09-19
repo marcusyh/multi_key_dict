@@ -387,7 +387,7 @@ class MultiKeyDict:
         """
         mkd_type, mkd_key = self._parse_key(type_key)
         data_key = self._indices[mkd_type][mkd_key]
-        return self._data[data_key], data_key
+        return self._data[data_key]
     
 
     def exists(self, type_key):
@@ -572,7 +572,40 @@ class MultiKeyDict:
         except KeyError:
             return default
 
+    def get_inner_key(self, type_key):
+        """
+        Retrieves the inner key (index) associated with a given type_key from the dictionary.
 
+        This method is used to get the internal index for a given key, which can be useful
+        for efficient lookups and internal operations.
+
+        Args:
+            type_key: The key to look up. Can be one of the following:
+                      - A tuple of (mkd_type, mkd_key)
+                      - Just mkd_key if using the default type
+                      - A list [mkd_type, mkd_key]
+
+        Returns:
+            The inner key (index) associated with the given type_key.
+
+        Raises:
+            KeyError: If the key is not found in the dictionary.
+
+        Note:
+            This method uses the internal indices for efficient lookup across different key types.
+            It's primarily used for internal operations and advanced usage scenarios.
+
+        Example:
+            >>> mkd = MultiKeyDict(['table_id', 'order_id'])
+            >>> mkd[['table_id', 1]] = {'price': 150.0, 'volume': 1000000}
+            >>> mkd.get_inner_key(('table_id', 1))
+            0  # Assuming this is the first item added
+            >>> mkd.get_inner_key(1)  # Using default type
+            0  # Same result as above
+        """
+        mkd_type, mkd_key = self._parse_key(type_key)
+        return self._indices[mkd_type][mkd_key]
+ 
     def keys(self, mkd_type=None):
         """
         Return a view of the dictionary's keys for the default mkd_type or specified mkd_type.

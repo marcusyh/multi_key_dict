@@ -1,7 +1,9 @@
 import copy
 import logging
 from datetime import datetime
-from multi_key_dict import MultiKeyDict
+from common.multi_key_dict import MultiKeyDict
+from types import MappingProxyType
+import copy
 
 
 class MultiKeyDictCache():
@@ -190,7 +192,7 @@ class MultiKeyDictCache():
         self.default_type = default_type
         self._default_type_raw_name = default_type_raw_name
 
-        if self._mkd_cache:
+        if self._mkd_cache is not None:
             self._mkd_cache.set_default(self.must_types_list.index(default_type))
             
 
@@ -208,22 +210,32 @@ class MultiKeyDictCache():
             
     
     def _check_missing_keys(self, raw_dict = None):
+        """
+        Checks if the input dictionary contains all the required keys.
+
+        Args:
+            raw_dict (dict): The dictionary to check for missing keys.
+
+        Raises:
+            ValueError: If the input dictionary is None or not a dictionary, or if any required keys are missing.
+        """
         # Check if input is valid
         if not raw_dict or not isinstance(raw_dict, dict):
+            logging.error(f"Input data to MkdCacheManager is None or not a dictionary: {raw_dict}", exc_info=True)
             raise ValueError(f"Input data to MkdCacheManager is None or not a dictionary: {raw_dict}")
         
         raw_keys = set(list(raw_dict.keys()))
-        pop_msg = f"Cache %s is/are not in the row data: %s, row data: {raw_dict}"  
+        pop_msg = f"Cache %s required key %s is/are not exists in row data: {raw_dict}"  
        
         # Check if default type keys are present
         if not raw_keys.issuperset(self._default_type_raw_name):
-            logging.error(pop_msg% ("default key", self._default_type_raw_name - raw_keys))
+            logging.error(pop_msg% ("default key", self._default_type_raw_name - raw_keys), exc_info=True)
             raise ValueError(pop_msg% ("self.default_type", self._default_type_raw_name - raw_keys))
 
         # Check if must type keys are present
         if not raw_keys.issuperset(self._must_types_raw_names):
             logging.error(pop_msg% ("self.must_types_list", self._must_types_raw_names - raw_keys), exc_info=True)
-            raise ValueError(pop_msg% ("self.must_types_list", self._must_types_raw_names - raw_keys), exc_info=True)
+            raise ValueError(pop_msg% ("self.must_types_list", self._must_types_raw_names - raw_keys))
 
         # Check for missing optional type keys
         if self._optional_types_raw_names and not raw_keys.issuperset(self._optional_types_raw_names):
@@ -247,7 +259,7 @@ class MultiKeyDictCache():
 
 
     @classmethod
-    def generate_key(cls, row, key_name_list, exception_flag=True):
+    def generate_key(cls, row, key_name_list, exception_flag=True, error_msg=True):
         """
         Generates a unique key for a given row based on specified key names.
 
@@ -274,14 +286,16 @@ class MultiKeyDictCache():
             msg = f"Input data to MkdCacheManager is None or not a dictionary: {row}"
             if exception_flag:
                 raise ValueError(msg)
-            logging.warning(msg)
+            if error_msg:
+                logging.warning(msg)
             return None
         
         if not key_name_list:
             msg = f"Key name list cannot be None or empty: {key_name_list}"
             if exception_flag:
                 raise ValueError(msg)
-            logging.warning(msg)
+            if error_msg:
+                logging.warning(msg)
             return None
 
         values = []
@@ -290,7 +304,8 @@ class MultiKeyDictCache():
                 msg = f"Key name {key_name} is not in the row data: {row}"
                 if exception_flag:
                     raise ValueError(msg)
-                logging.warning(msg)
+                if error_msg:
+                    logging.warning(msg)
                 return None
             values.append(cls._process_value(row[key_name]))
 
@@ -370,25 +385,34 @@ class MultiKeyDictCache():
             self._mkd_cache[default_key].update(dict_item)
         else:
             self._mkd_cache[mkd_keys] = copy.deepcopy(dict_item)
+            
+        return True
         
 
-    def upsert_by_default(self, dict_item, key):
+    def upsert_with_custom_key(self, dict_item, custom_key):
         """
-        Adds items to the cache using the default key.
-        
+        Adds or updates an item in the cache using a custom key, bypassing the default key generation rules.
+
+        This method allows for more flexible cache operations when the dict_item doesn't contain all required keys.
+        It directly uses the provided custom_key for cache operations, ignoring the types_list and default_type.
+
         Args:
-            items (dict): The items to add to the cache.
+            dict_item (dict): The item to add or update in the cache.
+            custom_key (str): The custom key to use for this cache operation.
+
+        Raises:
+            ValueError: If dict_item is not a dictionary or if custom_key is None or empty.
         """
         if not isinstance(dict_item, dict):
             raise ValueError(f"Input data to MkdCacheManager is not a dictionary: {dict_item}")
         
-        if not key:
-            raise ValueError(f"Key cannot be None or empty: {key}")
+        if not custom_key:
+            raise ValueError(f"Custom key cannot be None or empty: {custom_key}")
         
-        if self.is_exists_by_key(key, self.default_type):
-            self._mkd_cache[key].update(dict_item)
+        if self.is_exists_by_key(custom_key, self.default_type):
+            self._mkd_cache[custom_key].update(dict_item)
         else:
-            self._mkd_cache[key] = copy.deepcopy(dict_item)
+            self._mkd_cache[custom_key] = copy.deepcopy(dict_item)
 
 
     def batch_upsert(self, dict_items):
@@ -405,7 +429,7 @@ class MultiKeyDictCache():
             self.upsert(dict_item)
             
 
-    def fetch(self, key, type_name=None):
+    def fetch(self, key, type_name=None, deepcopy=False):
         """
         Fetches an item from the cache using the specified type_name and key.
 
@@ -420,12 +444,14 @@ class MultiKeyDictCache():
             if type_name is None:
                 type_name = self.default_type
             value = self._mkd_cache[(type_name, key)]
-            return copy.deepcopy(value)
+            if deepcopy:
+                return copy.deepcopy(value)
+            return MappingProxyType(value)
         except KeyError:
             return None
         
  
-    def query(self, sub_dict):
+    def query(self, sub_dict, deepcopy=False):
         """
         Queries the cache using a subset of the stored content dictionary.
 
@@ -443,14 +469,14 @@ class MultiKeyDictCache():
         for _type, query_key in zip(self.types_list, query_keys):
             if not query_key:
                 continue
-            value = self.fetch(query_key, _type)
+            value = self.fetch(query_key, _type, deepcopy)
             if value is not None:
                 return value
             
         return None
     
 
-    def fetch_all(self, type_name=None):
+    def fetch_all(self, type_name=None, deepcopy=False, filter=None):
         """
         Fetches all items from the cache.
 
@@ -480,32 +506,54 @@ class MultiKeyDictCache():
                 return {}
 
         rtn = {}
-        for key, value in self._mkd_cache.items():
-            rtn[key] = copy.deepcopy(value)
+        for mkd_key, mkd_value in self._mkd_cache.items():
+            if filter:
+                if not all(mkd_value.get(key) == value for key, value in filter.items()):
+                    continue
+            if deepcopy:
+                mkd_value = copy.deepcopy(mkd_value)
+            else:
+                mkd_value = MappingProxyType(mkd_value)
+            rtn[mkd_key] = mkd_value
             
         if type_name:
             self.restore_default_type()
         
         return rtn
     
-
-    def get_count(self, type_name=None, all_types=False):
+    def get_count(self, type_name=None):
         """
         Returns the number of items in the cache.
         
+        This method has different behaviors based on the provided type_name:
+        1. If type_name is None:
+           - Returns the total number of items in the entire cache, regardless of type.
+        2. If type_name is provided:
+           - Checks if the type_name is valid (exists in self.types_list).
+           - If valid, returns the count of items specifically for that type.
+           - If invalid, raises a ValueError.
+
+        The type-specific count is useful when the cache contains items of different types,
+        and you want to know how many items exist for a particular type.
+
         Args:
-            type_name (str, optional): The type name to get the count for.
-        
+            type_name (str, optional): The type name to get the count for. 
+                                       If None, counts all items regardless of type.
+
         Returns:
-            int: The number of items in the cache.
+            int: The number of items in the cache, either total or type-specific.
+
+        Raises:
+            ValueError: If the provided type_name is not in the self.types_list.
         """
-        if type_name is None:
-            type_name = self.default_type
-            
-        if all_types:
-            return len(self._mkd_cache)
+        if type_name is not None and type_name not in self.types_list:
+            raise ValueError(f"Type name {type_name} is not in the types list: {self.types_list}")
         
-        return len(self._mkd_cache._indices[type_name])
+        if type_name:
+            return len(self._mkd_cache._indices[type_name])
+            
+        return len(self._mkd_cache)
+        
 
 
     def is_exists_by_key(self, key, type_name=None):
